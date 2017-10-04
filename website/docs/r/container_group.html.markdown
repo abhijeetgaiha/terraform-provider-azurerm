@@ -93,7 +93,7 @@ The following arguments are supported:
 
 * `image_registry_credential` - (Optional) Credentials for accessing private docker container image registries. Changing this forces a new resource to be created.
 
-* `container` - (Required) The definition of a container that is part of the group. Changing this forces a new resource to be created.
+* `container` - (Required) The definition of a container that is part of the group as documented in the `container` block below. Changing this forces a new resource to be created.
 
 ~> **Note:** if `os_type` is set to `Windows` currently only a single `container` block is supported.
 
@@ -121,7 +121,7 @@ The `container` block supports:
 
 * `command` - (Optional) A command line to be run on the container. Changing this forces a new resource to be created.
 
-* `volume` - (Optional) The definition of a volume mount for this container. Changing this forces a new resource to be created.
+* `volume` - (Optional) The definition of a volume mount for this container as documented in the `volume` block below. Changing this forces a new resource to be created.
 
 The `volume` block supports:
 
