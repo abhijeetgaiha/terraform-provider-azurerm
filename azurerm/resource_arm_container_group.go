@@ -60,31 +60,6 @@ func resourceArmContainerGroup() *schema.Resource {
 				Computed: true,
 			},
 
-			"image_registry_credential": {
-				Type:     schema.TypeList,
-				Optional: true,
-				ForceNew: true,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"server": {
-							Type:     schema.TypeString,
-							Required: true,
-							ForceNew: true,
-						},
-						"username": {
-							Type:     schema.TypeString,
-							Required: true,
-							ForceNew: true,
-						},
-						"password": {
-							Type:     schema.TypeString,
-							Required: true,
-							ForceNew: true,
-						},
-					},
-				},
-			},
-
 			"container": {
 				Type:     schema.TypeList,
 				Required: true,
@@ -210,8 +185,6 @@ func resourceArmContainerGroupCreate(d *schema.ResourceData, meta interface{}) e
 	tags := d.Get("tags").(map[string]interface{})
 
 	containers, containerGroupPorts, containerGroupVolumes := expandContainerGroupContainers(d)
-	credentials := expandContainerGroupImageRegistryCredentials(d)
-
 	containerGroup := containerinstance.ContainerGroup{
 		Name:     &name,
 		Location: &location,
@@ -222,9 +195,8 @@ func resourceArmContainerGroupCreate(d *schema.ResourceData, meta interface{}) e
 				Type:  &IPAddressType,
 				Ports: containerGroupPorts,
 			},
-			OsType:                   containerinstance.OperatingSystemTypes(OSType),
-			Volumes:                  containerGroupVolumes,
-			ImageRegistryCredentials: credentials,
+			OsType:  containerinstance.OperatingSystemTypes(OSType),
+			Volumes: containerGroupVolumes,
 		},
 	}
 
@@ -280,14 +252,8 @@ func resourceArmContainerGroupRead(d *schema.ResourceData, meta interface{}) err
 		d.Set("ip_address_type", address.Type)
 		d.Set("ip_address", address.IP)
 	}
-  
-  imageRegistryCredentials := flattenContainerGroupImageRegistryCredentials(d, resp.ImageRegistryCredentials)
-	err = d.Set("image_registry_credential", imageRegistryCredentials)
-	if err != nil {
-		return fmt.Errorf("Error setting `image_registry_credential`: %+v", err)
-	}
 
-  if props := resp.ContainerGroupProperties; props != nil {
+	if props := resp.ContainerGroupProperties; props != nil {
 		containerConfigs := flattenContainerGroupContainers(d, resp.Containers, props.IPAddress.Ports, props.Volumes)
 		err = d.Set("container", containerConfigs)
 		if err != nil {
@@ -321,29 +287,6 @@ func resourceArmContainerGroupDelete(d *schema.ResourceData, meta interface{}) e
 	}
 
 	return nil
-}
-
-func flattenContainerGroupImageRegistryCredentials(d *schema.ResourceData, credentials *[]containerinstance.ImageRegistryCredential) *[]interface{} {
-	ircConfigs := make([]interface{}, 0, len(*credentials))
-	ircConfigsOld := d.Get("image_registry_credential").([]interface{})
-
-	for _, irc := range *credentials {
-		ircConfig := make(map[string]interface{})
-		ircConfig["server"] = *irc.Server
-		ircConfig["username"] = *irc.Username
-		// search for password in the old configs
-		for _, oldIrcConfig := range ircConfigsOld {
-			data := oldIrcConfig.(map[string]interface{})
-			oldServer := data["server"].(string)
-			if *irc.Server == oldServer {
-				ircConfig["password"] = data["password"].(string)
-			}
-		}
-
-		ircConfigs = append(ircConfigs, ircConfig)
-	}
-
-	return &ircConfigs
 }
 
 func flattenContainerGroupContainers(d *schema.ResourceData, containers *[]containerinstance.Container, containerGroupPorts *[]containerinstance.Port, containerGroupVolumes *[]containerinstance.Volume) []interface{} {
@@ -466,29 +409,6 @@ func flattenContainerVolumes(volumeMounts *[]containerinstance.VolumeMount, cont
 	return volumeConfigs
 }
 
-func expandContainerGroupImageRegistryCredentials(d *schema.ResourceData) *[]containerinstance.ImageRegistryCredential {
-	credentialsConfig := d.Get("image_registry_credential").([]interface{})
-	credentials := make([]containerinstance.ImageRegistryCredential, 0, len(credentialsConfig))
-
-	for _, credentialConfig := range credentialsConfig {
-		data := credentialConfig.(map[string]interface{})
-
-		server := data["server"].(string)
-		username := data["username"].(string)
-		password := data["password"].(string)
-
-		credential := containerinstance.ImageRegistryCredential{
-			Server:   &server,
-			Username: &username,
-			Password: &password,
-		}
-
-		credentials = append(credentials, credential)
-	}
-
-	return &credentials
-}
-
 func expandContainerGroupContainers(d *schema.ResourceData) (*[]containerinstance.Container, *[]containerinstance.Port, *[]containerinstance.Volume) {
 	containersConfig := d.Get("container").([]interface{})
 	containers := make([]containerinstance.Container, 0, len(containersConfig))
@@ -524,7 +444,6 @@ func expandContainerGroupContainers(d *schema.ResourceData) (*[]containerinstanc
 			containerPort := containerinstance.ContainerPort{
 				Port: &port,
 			}
-
 			container.Ports = &[]containerinstance.ContainerPort{containerPort}
 
 			// container group port (port number + protocol)
@@ -550,8 +469,11 @@ func expandContainerGroupContainers(d *schema.ResourceData) (*[]containerinstanc
 		}
 
 		if v, ok := data["volume"]; ok {
-			volumeMounts := expandContainerVolumes(v, &containerGroupVolumes)
+			volumeMounts, containerGroupVolumesPartial := expandContainerVolumes(v)
 			container.VolumeMounts = volumeMounts
+			if containerGroupVolumesPartial != nil {
+				containerGroupVolumes = append(containerGroupVolumes, *containerGroupVolumesPartial...)
+			}
 		}
 
 		containers = append(containers, container)
@@ -575,14 +497,15 @@ func expandContainerEnvironmentVariables(input interface{}) *[]containerinstance
 	return &output
 }
 
-func expandContainerVolumes(input interface{}, containerGroupVolumes *[]containerinstance.Volume) *[]containerinstance.VolumeMount {
+func expandContainerVolumes(input interface{}) (*[]containerinstance.VolumeMount, *[]containerinstance.Volume) {
 	volumesRaw := input.([]interface{})
 
 	if len(volumesRaw) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	volumeMounts := make([]containerinstance.VolumeMount, 0, len(volumesRaw))
+	containerGroupVolumes := make([]containerinstance.Volume, 0, len(volumesRaw))
 
 	for _, volumeRaw := range volumesRaw {
 		volumeConfig := volumeRaw.(map[string]interface{})
@@ -612,8 +535,8 @@ func expandContainerVolumes(input interface{}, containerGroupVolumes *[]containe
 			},
 		}
 
-		*containerGroupVolumes = append(*containerGroupVolumes, cv)
+		containerGroupVolumes = append(containerGroupVolumes, cv)
 	}
 
-	return &volumeMounts
+	return &volumeMounts, &containerGroupVolumes
 }
