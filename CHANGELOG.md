@@ -1,4 +1,21 @@
-## 0.2.3 (Unreleased)
+## 0.3.0 (Unreleased)
+
+FEATURES:
+
+* **New Data Source:** `azurerm_builtin_role_definition` [GH-384]
+* **New Data Source:** `azurerm_image` [GH-382]
+* **New Data Source:** `azurerm_platform_image` [GH-375]
+
+IMPROVEMENTS:
+
+* `azurerm_container_group` - add support for volume mounts [GH-366]
+* `azurerm_key_vault` - fix a crash when no certificate_permissions are defined [GH-374]
+* `azurerm_storage_account` - support for File Encryption [GH-363]
+* `azurerm_storage_account` - support for Custom Domain [GH-363]
+* `azurerm_storage_account` - splitting the storage account Tier and Replication out into separate fields [GH-363]
+* `azurerm_virtual_machine` - fixing a bug where `additional_unattend_config.content` was being updated unintentionally [GH-377]
+* `azurerm_virtual_machine_scale_set` - fixing a bug where `additional_unattend_config.content` was being updated unintentionally [GH-377]
+
 ## 0.2.2 (September 28, 2017)
 
 FEATURES:
